@@ -1,0 +1,21 @@
+# Dépôt Git
+.git/
+.github/
+
+# Fichiers Python compilés
+__pycache__/
+*.pyc
+*.pyo
+
+# Cache pytest et couverture
+.pytest_cache/
+htmlcov/
+coverage.xml
+
+# Variables d'environnement et secrets
+.env
+.env.*
+
+# Terraform (pour les TP suivants)
+*.tfstate
+.terraform/
