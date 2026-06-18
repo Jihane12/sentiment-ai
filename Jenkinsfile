@@ -3,7 +3,7 @@ pipeline {
     agent any
     environment {
         IMAGE_NAME = 'sentiment-ai'
-        REGISTRY = 'ghcr.io/Jihane12'
+        REGISTRY = 'ghcr.io/jihane12' 
         IMAGE_TAG = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
     }
     stages {
