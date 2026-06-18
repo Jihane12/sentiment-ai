@@ -47,9 +47,9 @@ stage('Build & Test') {
     }
 }
 stage('Push') {
-    when {
+   when {
     expression {
-        return sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim() == 'main'
+        return sh(script: 'git branch -r --contains HEAD', returnStdout: true).trim().contains('origin/main')
     }
 }
     steps {
