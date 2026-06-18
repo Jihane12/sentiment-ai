@@ -47,7 +47,11 @@ stage('Build & Test') {
     }
 }
 stage('Push') {
-    when { branch 'main' }
+    when {
+    expression {
+        return sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim() == 'main'
+    }
+}
     steps {
         withCredentials([usernamePassword(
             credentialsId: 'github-token',
