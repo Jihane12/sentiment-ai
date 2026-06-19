@@ -32,7 +32,7 @@ pipeline {
         stage('Build & Test') {
             steps {
                 sh '''
-                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                docker build --no-cache -t ${IMAGE_NAME}:${IMAGE_TAG} .
 
                 docker rm -f test-runner 2>/dev/null || true
 
