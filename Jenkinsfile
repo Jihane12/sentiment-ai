@@ -1,4 +1,3 @@
-cat > Jenkinsfile << 'JENKINSFILE_EOF'
 // Jenkinsfile - Pipeline CI/CD SentimentAI
 pipeline {
     agent any
@@ -142,10 +141,14 @@ pipeline {
 
         stage('Deploy Staging') {
             when { branch 'main' }
+            steps {
                 echo "Déploiement de ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} en staging..."
                 sh '''
                 docker compose -f docker-compose.yml -p staging down 2>/dev/null || true
                 docker compose -f docker-compose.yml -p staging up -d
+                echo "Staging disponible sur http://localhost:8001"
+                '''
+            }
         }
 
     } // fin stages
@@ -155,14 +158,10 @@ pipeline {
             sh 'docker compose down -v 2>/dev/null || true'
         }
         success {
+            echo "Pipeline réussi ! Image : ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+        }
+        failure {
             echo 'Pipeline échoué. Consultez les logs ci-dessus.'
         }
     }
 }
-JENKINSFILE_EOF            echo "Pipeline réussi ! Image : ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-        }
-        failure {
-                echo "Staging disponible sur http://localhost:8001"
-                '''
-            }
-
