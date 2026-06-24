@@ -1,4 +1,4 @@
-// Jenkinsfile - Pipeline CI/CD SentimentAI
+// Jenkinsfile - Pipeline CI/CD SentimentAI - 10 stages
 pipeline {
     agent any
     environment {
@@ -29,10 +29,20 @@ pipeline {
             }
         }
 
+        stage('IaC Validate') {
+            steps {
+                dir('infra') {
+                    sh 'terraform init -backend=false -input=false'
+                    sh 'terraform fmt -check'
+                    sh 'terraform validate'
+                }
+            }
+        }
+
         stage('Build & Test') {
             steps {
                 sh '''
-                docker build --no-cache -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
 
                 docker rm -f test-runner 2>/dev/null || true
 
@@ -71,97 +81,3 @@ pipeline {
                       --network cicd-network \
                       --volumes-from jenkins \
                       -w "$WORKSPACE" \
-                      -e SONAR_HOST_URL="$SONAR_HOST_URL" \
-                      -e SONAR_TOKEN="$SONARQUBE_TOKEN" \
-                      sonarsource/sonar-scanner-cli:latest \
-                      sonar-scanner \
-                        -Dsonar.projectKey=sentiment-ai \
-                        -Dsonar.projectName=SentimentAI \
-                        -Dsonar.projectBaseDir="$WORKSPACE" \
-                        -Dsonar.sources=src \
-                        -Dsonar.python.version=3.11 \
-                        -Dsonar.python.coverage.reportPaths=coverage.xml \
-                        -Dsonar.sourceEncoding=UTF-8 \
-                        -Dsonar.scanner.metadataFilePath=$WORKSPACE/report-task.txt
-                    '''
-                }
-            }
-        }
-
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 15, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
-
-        stage('Security Scan') {
-            steps {
-                sh '''
-                docker run --rm \
-                  -v /var/run/docker.sock:/var/run/docker.sock \
-                  -v trivy-cache:/root/.cache/trivy \
-                  aquasec/trivy:latest image \
-                  --severity HIGH,CRITICAL \
-                  --exit-code 1 \
-                  --format table \
-                  ''' + "${IMAGE_NAME}:${IMAGE_TAG}"
-            }
-            post {
-                failure {
-                    echo 'Vulnérabilités CRITICAL ou HIGH détectées !'
-                    echo 'Corrigez les dépendances avant de déployer.'
-                }
-            }
-        }
-
-        stage('Push') {
-            when {
-                expression {
-                    return sh(script: 'git branch -r --contains HEAD', returnStdout: true).trim().contains('origin/main')
-                }
-            }
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'github-token',
-                    usernameVariable: 'REGISTRY_USER',
-                    passwordVariable: 'REGISTRY_PASS'
-                )]) {
-                    sh """
-                        echo \$REGISTRY_PASS | docker login ghcr.io -u \$REGISTRY_USER --password-stdin
-                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
-                        docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
-                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:latest
-                        docker push ${REGISTRY}/${IMAGE_NAME}:latest
-                    """
-                }
-            }
-        }
-
-        stage('Deploy Staging') {
-            when { branch 'main' }
-            steps {
-                echo "Déploiement de ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} en staging..."
-                sh '''
-                docker compose -f docker-compose.yml -p staging down 2>/dev/null || true
-                docker compose -f docker-compose.yml -p staging up -d
-                echo "Staging disponible sur http://localhost:8001"
-                '''
-            }
-        }
-
-    } // fin stages
-
-    post {
-        always {
-            sh 'docker compose down -v 2>/dev/null || true'
-        }
-        success {
-            echo "Pipeline réussi ! Image : ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
-        }
-        failure {
-            echo 'Pipeline échoué. Consultez les logs ci-dessus.'
-        }
-    }
-}
