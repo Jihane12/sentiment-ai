@@ -93,3 +93,95 @@ pipeline {
                 }
             }
         }
+stage('Quality Gate') {
+            steps {
+                timeout(time: 15, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Security Scan') {
+            steps {
+                sh '''
+                docker run --rm \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v trivy-cache:/root/.cache/trivy \
+                  aquasec/trivy:latest image \
+                  --severity HIGH,CRITICAL \
+                  --exit-code 0 \
+                  --format table \
+                  ''' + "${IMAGE_NAME}:${IMAGE_TAG}"
+            }
+            post {
+                failure {
+                    echo 'Vulnérabilités CRITICAL ou HIGH détectées !'
+                }
+            }
+        }
+
+        stage('Push') {
+            when {
+                expression {
+                    return sh(script: 'git branch -r --contains HEAD', returnStdout: true).trim().contains('origin/main')
+                }
+            }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'github-token',
+                    usernameVariable: 'REGISTRY_USER',
+                    passwordVariable: 'REGISTRY_PASS'
+                )]) {
+                    sh """
+                        echo \$REGISTRY_PASS | docker login ghcr.io -u \$REGISTRY_USER --password-stdin
+                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+                        docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+                        docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY}/${IMAGE_NAME}:latest
+                        docker push ${REGISTRY}/${IMAGE_NAME}:latest
+                    """
+                }
+            }
+        }
+
+        stage('IaC Apply') {
+            when {
+                expression {
+                    return sh(script: 'git branch -r --contains HEAD', returnStdout: true).trim().contains('origin/main')
+                }
+            }
+            steps {
+                dir('infra') {
+                    sh 'terraform init -input=false'
+                    sh """
+                        terraform apply -auto-approve \
+                        -var='image_tag=${IMAGE_TAG}'
+                    """
+                }
+            }
+        }
+
+        stage('Deploy Staging') {
+            when {
+                expression {
+                    return sh(script: 'git branch -r --contains HEAD', returnStdout: true).trim().contains('origin/main')
+                }
+            }
+            steps {
+                sh 'curl -f http://localhost:8001/health || exit 1'
+            }
+        }
+
+    } // fin stages
+
+    post {
+        always {
+            sh 'docker compose down -v 2>/dev/null || true'
+        }
+        success {
+            echo "Pipeline réussi ! Image : ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+        }
+        failure {
+            echo 'Pipeline échoué. Consultez les logs ci-dessus.'
+        }
+    }
+}
