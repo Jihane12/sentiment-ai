@@ -160,16 +160,16 @@ stage('Quality Gate') {
             }
         }
 
-        stage('Deploy Staging') {
-            when {
-                expression {
-                    return sh(script: 'git branch -r --contains HEAD', returnStdout: true).trim().contains('origin/main')
-                }
-            }
-            steps {
-                sh 'curl -f http://localhost:8001/health || exit 1'
-            }
+      stage('Deploy Staging') {
+    when {
+        expression {
+            return sh(script: 'git branch -r --contains HEAD', returnStdout: true).trim().contains('origin/main')
         }
+    }
+    steps {
+        sh 'sleep 3 && curl -f http://sentiment-staging:8000/health || exit 1'
+    }
+}
 
     } // fin stages
 
