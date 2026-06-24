@@ -171,6 +171,36 @@ stage('Quality Gate') {
     }
 }
 
+
+      stage('Smoke Test') {
+            when {
+                expression {
+                    return sh(script: 'git branch -r --contains HEAD', returnStdout: true).trim().contains('origin/main')
+                }
+            }
+            steps {
+                sh '''
+                    echo "Attente demarrage (10 s)..."
+                    sleep 10
+                    curl -f http://localhost:8001/health || exit 1
+                    echo "/health OK"
+                    curl -s http://localhost:8001/metrics | grep -q sentiment_predictions_total || exit 1
+                    echo "/metrics OK"
+                    sleep 20
+                    curl -s "http://localhost:9090/api/v1/query?query=up{job='sentiment-ai'}" | grep -q '"value":.*1' || exit 1
+                    echo "Prometheus UP"
+                    curl -f http://localhost:3000/api/health || exit 1
+                    echo "Grafana OK"
+                '''
+            }
+            post {
+                failure {
+                    sh 'docker logs prometheus || true'
+                    sh 'docker logs sentiment-staging || true'
+                    echo 'Smoke Test KO -- voir logs ci-dessus'
+                }
+            }
+        }
     } // fin stages
 
     post {
