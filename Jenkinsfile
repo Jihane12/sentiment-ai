@@ -182,14 +182,14 @@ stage('Quality Gate') {
                 sh '''
                     echo "Attente demarrage (10 s)..."
                     sleep 10
-                    curl -f http://localhost:8001/health || exit 1
+                    curl -f http://sentiment-staging:8000/health || exit 1
                     echo "/health OK"
-                    curl -s http://localhost:8001/metrics | grep -q sentiment_predictions_total || exit 1
+                    curl -s http://sentiment-staging:8000/metrics | grep -q sentiment_predictions_total || exit 1
                     echo "/metrics OK"
                     sleep 20
                     curl -s "http://localhost:9090/api/v1/query?query=up{job='sentiment-ai'}" | grep -q '"value":.*1' || exit 1
                     echo "Prometheus UP"
-                    curl -f http://localhost:3000/api/health || exit 1
+                    curl -f http://grafana:3000/api/health || exit 1
                     echo "Grafana OK"
                 '''
             }
